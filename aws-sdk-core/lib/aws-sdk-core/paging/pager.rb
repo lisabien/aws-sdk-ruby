@@ -18,19 +18,23 @@ module Aws
       # @param [Seahorse::Client::Response] response
       # @return [Hash]
       def next_tokens(response)
-        @tokens.each.with_object({}) do |(source, target), next_tokens|
+        next_tokens = {}
+        @tokens.each do |source, target|
           value = JMESPath.search(source, response.data)
           next_tokens[target.to_sym] = value unless empty_value?(value)
         end
+        next_tokens
       end
 
       # @param [Seahorse::Client::Response] response
+      # @option options [Hash] :prev_tokens
       # @return [Boolean]
-      def truncated?(response)
+      def truncated?(response, options = {})
         if @more_results
           JMESPath.search(@more_results, response.data)
         else
-          !next_tokens(response).empty?
+          tokens = next_tokens(response)
+          !tokens.empty? && tokens != options[:prev_tokens]
         end
       end
 

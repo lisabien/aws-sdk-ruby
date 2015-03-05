@@ -36,8 +36,12 @@ module Aws
 
     # @param [Seahorse::Client::Response] response
     # @param [Paging::Pager] pager
-    def initialize(response, pager)
+    # @option options [Hash] :prev_tokens ({})
+    def initialize(response, pager, options = {})
       @pager = pager
+      @prev_tokens = options[:prev_tokens] || {}
+      @next_tokens = @pager.next_tokens(response)
+      @truncated = @pager.truncated?(response, prev_tokens: @prev_tokens)
       super(context:response.context, data:response.data, error:response.error)
     end
 
@@ -48,15 +52,14 @@ module Aws
     # when this method returns `false` will raise an error.
     # @return [Boolean]
     def last_page?
-      @last_page = !@pager.truncated?(self)
-      @last_page
+      !@truncated
     end
 
     # Returns `true` if there are more results.  Calling {#next_page} will
     # return the next response.
     # @return [Boolean]
     def next_page?
-      !last_page?
+      @truncated
     end
 
     # @return [Seahorse::Client::Response]
@@ -64,7 +67,7 @@ module Aws
       if last_page?
         raise LastPageError.new(self)
       else
-        PageableResponse.new(next_response(params), pager)
+        PageableResponse.new(next_response(params), pager, prev_tokens: @next_tokens)
       end
     end
 
@@ -117,7 +120,7 @@ module Aws
     # @return [Hash] Returns the hash of request parameters for the
     #   next page, merging any given params.
     def next_page_params(params)
-      context[:original_params].merge(@pager.next_tokens(self).merge(params))
+      context[:original_params].merge(@next_tokens.merge(params))
     end
 
     # Raised when calling {PageableResponse#next_page} on a pager that
